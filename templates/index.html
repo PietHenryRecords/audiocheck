@@ -2,112 +2,89 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Audio Checker</title>
+    <title>Audio RMS Checker</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f5f5f5;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
         }
-        h1 {
-            color: #333;
-        }
-        .upload-form {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px #ccc;
-            margin-bottom: 30px;
-        }
-        .report {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px #ccc;
-            margin-top: 20px;
-        }
-        .file-name {
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        .status-ok {
-            color: green;
-            font-weight: bold;
-        }
-        .status-fail {
-            color: red;
-            font-weight: bold;
-        }
-        .value {
-            font-family: monospace;
-            margin-bottom: 5px;
-        }
-        .csv-button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #4CAF50;
+        header {
+            background: #9c0000;
             color: white;
-            text-decoration: none;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+        }
+        header img {
+            height: 50px;
+            margin-right: 15px;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        main {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+        }
+        .description {
+            margin-bottom: 30px;
+            color: #333;
+            font-size: 16px;
+        }
+        input[type="file"] {
+            margin-bottom: 15px;
+        }
+        button {
+            background-color: #9c0000;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-size: 16px;
             border-radius: 5px;
+        }
+        button:hover {
+            background-color: #7a0000;
         }
     </style>
 </head>
 <body>
 
-    <h1>🎧 Audio Checker</h1>
+<header>
+    <img src="https://cdn-icons-png.flaticon.com/512/727/727245.png" alt="Logo">
+    <h1>Audio RMS Checker</h1>
+</header>
 
-    <div class="upload-form">
-        <form method="POST" action="/upload" enctype="multipart/form-data">
-            <input type="file" name="files" accept=".mp3,.flac" multiple required>
-            <br><br>
-            <button type="submit">Dateien hochladen und prüfen</button>
-        </form>
+<main>
+    <div class="description">
+        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS) erfüllen.  
+        Lade deine MP3-Dateien hoch und erhalte sofort das Ergebnis.
     </div>
+
+    <form action="/" method="post" enctype="multipart/form-data">
+        <input type="file" name="files" multiple required><br>
+        <button type="submit">Dateien hochladen und prüfen</button>
+    </form>
 
     {% if reports %}
         <h2>Ergebnisse:</h2>
-
         {% for report in reports %}
-            <div class="report">
-                {% if report is string %}
-                    <div class="status-fail">{{ report }}</div>
-                {% else %}
-                    {% for filename, data in report.items() %}
-                        <div class="file-name">{{ filename }}</div>
-                        {% if data['Fehler bei RMS-Messung'] %}
-                            <div class="status-fail">Fehler: {{ data['Fehler bei RMS-Messung'] }}</div>
-                        {% else %}
-                            <div class="value">
-                                Gemessene RMS: {{ "%.2f"|format(data["Gemessene RMS (mean_volume, dB)"]) }} dB
-                            </div>
-
-                            {% if data["Gemessene RMS (mean_volume, dB)"] > -18 %}
-                                <div class="value">Abweichung: {{ "%.2f"|format(data["Gemessene RMS (mean_volume, dB)"] - (-18)) }} dB zu laut</div>
-                            {% elif data["Gemessene RMS (mean_volume, dB)"] < -24 %}
-                                <div class="value">Abweichung: {{ "%.2f"|format((-24) - data["Gemessene RMS (mean_volume, dB)"]) }} dB zu leise</div>
-                            {% else %}
-                                <div class="value">Abweichung: innerhalb der Toleranz ✅</div>
-                            {% endif %}
-
-                            <div class="{% if data['RMS OK (zwischen -24 und -18 dB)'] %}status-ok{% else %}status-fail{% endif %}">
-                                {% if data['RMS OK (zwischen -24 und -18 dB)'] %}
-                                    ✅ RMS passt (zwischen -24 und -18 dB)
-                                {% else %}
-                                    ❌ RMS außerhalb der Vorgaben
-                                {% endif %}
-                            </div>
-                        {% endif %}
-                    {% endfor %}
-                {% endif %}
-            </div>
+            <div>{{ report }}</div>
         {% endfor %}
-
-        <div>
-            <a href="/download_csv" class="csv-button">📥 Ergebnisse als CSV herunterladen</a>
-        </div>
-
+        <br>
+        <form action="/download" method="get">
+            <button type="submit">Ergebnisse als CSV herunterladen</button>
+        </form>
     {% endif %}
+</main>
 
 </body>
 </html>
