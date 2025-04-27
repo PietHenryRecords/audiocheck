@@ -1,145 +1,138 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Audio RMS Checker</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #fff;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      min-height: 100vh;
-    }
-    header {
-      background: #9c0000;
-      color: white;
-      padding: 20px;
-      width: 100%;
-      text-align: center;
-    }
-    main {
-      width: 100%;
-      max-width: 600px;
-      margin-top: 20px;
-      padding: 20px;
-    }
-    .upload-box, .results-box {
-      background: #f9f9f9;
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    button {
-      background-color: #9c0000;
-      border: none;
-      color: white;
-      padding: 10px 20px;
-      margin-top: 10px;
-      cursor: pointer;
-      font-size: 16px;
-      border-radius: 5px;
-    }
-    button:hover {
-      background-color: #7a0000;
-    }
-    .success-message {
-      background: #d4edda;
-      color: #155724;
-      padding: 10px;
-      border-radius: 5px;
-      margin-top: 10px;
-    }
-    .results-header {
-      font-size: 22px;
-      font-weight: bold;
-      margin: 20px 0 10px 0;
-    }
-    .result-card {
-      background: white;
-      border: 1px solid #ccc;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-    }
-    .ok {
-      color: green;
-      font-weight: bold;
-    }
-    .error {
-      color: red;
-      font-weight: bold;
-    }
-    ul {
-      padding-left: 20px;
-      margin-top: 5px;
-    }
-    li {
-      margin-bottom: 5px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Audio RMS Checker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            background: #9c0000;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            width: 100%;
+        }
+        main {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+        }
+        .description {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        input[type="file"] {
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #9c0000;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #7a0000;
+        }
+        .spinner {
+            display: none;
+            margin: 20px auto;
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #9c0000;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .results-header {
+            margin-top: 30px;
+            font-size: 22px;
+            font-weight: bold;
+        }
+        .result-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .status-ok {
+            color: green;
+            font-weight: bold;
+        }
+        .status-fail {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+    <script>
+        function showSpinner() {
+            document.getElementById('spinner').style.display = 'block';
+        }
+    </script>
 </head>
 <body>
 
 <header>
-  <h1>Audio RMS Checker</h1>
+    <h1>Audio RMS Checker</h1>
 </header>
 
 <main>
-
-  <div class="upload-box">
-    <p>Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen.<br>
-      Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.</p>
-
-    <form action="/" method="post" enctype="multipart/form-data">
-      <input type="file" name="files" multiple required><br>
-      <button type="submit">Dateien hochladen und prüfen</button>
-    </form>
-  </div>
-
-  {% if success %}
-    <div class="success-message">
-      ✅ Datei(en) erfolgreich geprüft!
+    <div class="description">
+        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen.
+        Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.
     </div>
-  {% endif %}
 
-  {% if reports %}
-  <div class="results-box">
-    <div class="results-header">Ergebnisse:</div>
-
-    {% for report in reports %}
-      <div class="result-card">
-        <strong>Datei:</strong> {{ report['Datei'] }}<br>
-
-        <strong>Prüfung:</strong>
-        {% if report['Fehler'] %}
-          <ul>
-            {% for fehler in report['Fehler'] %}
-              <li class="error">{{ fehler }}</li>
-            {% endfor %}
-          </ul>
-          <strong>Status:</strong> <span class="error">❌ Fehler</span>
-        {% else %}
-          <ul>
-            <li class="ok">Alle Prüfungen bestanden!</li>
-          </ul>
-          <strong>Status:</strong> <span class="ok">✅ OK</span>
-        {% endif %}
-      </div>
-    {% endfor %}
-
-    <form action="/download" method="get">
-      <button type="submit">Ergebnisse als CSV herunterladen</button>
+    <form action="/" method="post" enctype="multipart/form-data" onsubmit="showSpinner()">
+        <input type="file" name="files" multiple required><br>
+        <button type="submit">Dateien hochladen und prüfen</button>
     </form>
 
-  </div>
-  {% endif %}
+    <div id="spinner" class="spinner"></div>
 
+    {% if reports %}
+        <div class="results-header">Ergebnisse:</div>
+        {% for report in reports %}
+            <div class="result-card">
+                <strong>Datei:</strong> {{ report['Datei'] }}<br>
+                <strong>Prüfung:</strong>
+                <ul>
+                {% for check in report['Checks'] %}
+                    <li {% if 'falsch' in check %} style="color:red;" {% else %} style="color:green;" {% endif %}>
+                        {{ check }}
+                    </li>
+                {% endfor %}
+                </ul>
+                <strong>Status:</strong>
+                {% if report['Status'] == 'passt' %}
+                    <span class="status-ok">RMS passt</span>
+                {% else %}
+                    <span class="status-fail">Fehler</span>
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        <form action="/download" method="get">
+            <button type="submit">Ergebnisse als CSV herunterladen</button>
+        </form>
+    {% endif %}
 </main>
 
 </body>
