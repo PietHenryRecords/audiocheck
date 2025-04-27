@@ -1,24 +1,21 @@
 from flask import Flask, render_template, request, send_file
-import os
 import re
 import subprocess
 import io
 import csv
+import tempfile
+import os
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Globale Variable für die Reports
 reports_global = []
 
 # Muster für Dateinamen: 001_Titel.mp3
 FILENAME_PATTERN = re.compile(r'^\d{3}_.+\.mp3$')
 
-def analyze_audio(filepath):
+def analyze_audio(file_path):
     try:
         cmd = [
-            'ffmpeg', '-hide_banner', '-nostats', '-i', filepath,
+            'ffmpeg', '-hide_banner', '-nostats', '-i', file_path,
             '-af', 'volumedetect',
             '-f', 'null', '-'
         ]
@@ -69,23 +66,24 @@ def upload():
                 reports.append(f"Fehler: Dateiname {file.filename} entspricht nicht dem Muster NNN_Titel.mp3.")
                 continue
 
-            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(filepath)
+            # Arbeite direkt mit einer temporären Datei
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp:
+                tmp.write(file.read())
+                tmp.flush()
+                tmp_path = tmp.name
 
-            analysis = None
-            try:
-                analysis = analyze_audio(filepath)
-                reports.append({file.filename: analysis})
-            except Exception as e:
-                reports.append(f"Fehler bei {file.filename}: {str(e)}")
+                analysis = None
+                try:
+                    analysis = analyze_audio(tmp_path)
+                    reports.append({file.filename: analysis})
+                except Exception as e:
+                    reports.append(f"Fehler bei {file.filename}: {str(e)}")
 
-            try:
-                if analysis is not None:
-                    del analysis
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            except Exception as e:
-                print(f"Konnte Datei {filepath} nicht löschen: {e}")
+                # Danach Temp-Datei löschen
+                try:
+                    os.remove(tmp_path)
+                except Exception as e:
+                    print(f"Konnte Temp-Datei nicht löschen: {e}")
         else:
             reports.append(f"Fehler: {file.filename} ist keine unterstützte Audiodatei.")
 
@@ -132,4 +130,4 @@ def download_csv():
                      mimetype='text/csv')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
