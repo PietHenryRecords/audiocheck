@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Checker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .upload-form {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px #ccc;
+            margin-bottom: 30px;
+        }
+        .report {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px #ccc;
+            margin-top: 20px;
+        }
+        .file-name {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .status-ok {
+            color: green;
+            font-weight: bold;
+        }
+        .status-fail {
+            color: red;
+            font-weight: bold;
+        }
+        .value {
+            font-family: monospace;
+            margin-bottom: 5px;
+        }
+        .csv-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎧 Audio Checker</h1>
+
+    <div class="upload-form">
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+            <input type="file" name="files" accept=".mp3,.flac" multiple required>
+            <br><br>
+            <button type="submit">Dateien hochladen und prüfen</button>
+        </form>
+    </div>
+
+    {% if reports %}
+        <h2>Ergebnisse:</h2>
+
+        {% for report in reports %}
+            <div class="report">
+                {% if report is string %}
+                    <div class="status-fail">{{ report }}</div>
+                {% else %}
+                    {% for filename, data in report.items() %}
+                        <div class="file-name">{{ filename }}</div>
+                        {% if data['Fehler bei RMS-Messung'] %}
+                            <div class="status-fail">Fehler: {{ data['Fehler bei RMS-Messung'] }}</div>
+                        {% else %}
+                            <div class="value">
+                                Gemessene RMS: {{ "%.2f"|format(data["Gemessene RMS (mean_volume, dB)"]) }} dB
+                            </div>
+
+                            {% if data["Gemessene RMS (mean_volume, dB)"] > -18 %}
+                                <div class="value">Abweichung: {{ "%.2f"|format(data["Gemessene RMS (mean_volume, dB)"] - (-18)) }} dB zu laut</div>
+                            {% elif data["Gemessene RMS (mean_volume, dB)"] < -24 %}
+                                <div class="value">Abweichung: {{ "%.2f"|format((-24) - data["Gemessene RMS (mean_volume, dB)"]) }} dB zu leise</div>
+                            {% else %}
+                                <div class="value">Abweichung: innerhalb der Toleranz ✅</div>
+                            {% endif %}
+
+                            <div class="{% if data['RMS OK (zwischen -24 und -18 dB)'] %}status-ok{% else %}status-fail{% endif %}">
+                                {% if data['RMS OK (zwischen -24 und -18 dB)'] %}
+                                    ✅ RMS passt (zwischen -24 und -18 dB)
+                                {% else %}
+                                    ❌ RMS außerhalb der Vorgaben
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </div>
+        {% endfor %}
+
+        <div>
+            <a href="/download_csv" class="csv-button">📥 Ergebnisse als CSV herunterladen</a>
+        </div>
+
+    {% endif %}
+
+</body>
+</html>
