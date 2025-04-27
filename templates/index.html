@@ -121,8 +121,7 @@
 
 <main>
     <div class="description">
-        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS) erfüllen.  
-        Lade deine MP3-Dateien hoch und erhalte sofort das Ergebnis.
+        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen. Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.
     </div>
 
     <form action="/" method="post" enctype="multipart/form-data" onsubmit="showLoading()">
@@ -146,13 +145,12 @@
         {% for report in reports %}
             <div class="result-card">
                 <strong>Datei:</strong> {{ report['Datei'] }}<br>
-                <strong>RMS:</strong> {{ report['RMS'] }}<br>
-                <strong>Abweichung:</strong> {{ report['Abweichung'] }}<br>
+                <strong>Prüfung:</strong> {{ report['Prüfung'] }}<br>
                 <strong>Status:</strong>
-                {% if report['Status'] == 'passt' %}
-                    <span class="status-ok">RMS passt</span>
+                {% if report['Status'] == '✅ bestanden' %}
+                    <span class="status-ok">{{ report['Status'] }}</span>
                 {% else %}
-                    <span class="status-error">RMS außerhalb der Vorgaben</span>
+                    <span class="status-error">{{ report['Status'] }}</span>
                 {% endif %}
             </div>
         {% endfor %}
