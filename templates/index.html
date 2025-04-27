@@ -13,7 +13,7 @@
         header {
             background: #9c0000;
             color: white;
-            padding: 20px;
+            padding: 15px 20px;
             display: flex;
             align-items: center;
         }
@@ -26,7 +26,7 @@
             font-size: 24px;
         }
         main {
-            max-width: 600px;
+            max-width: 800px;
             margin: 40px auto;
             background: white;
             padding: 30px;
@@ -37,6 +37,7 @@
             margin-bottom: 30px;
             color: #333;
             font-size: 16px;
+            text-align: center;
         }
         input[type="file"] {
             margin-bottom: 15px;
@@ -54,12 +55,35 @@
         button:hover {
             background-color: #7a0000;
         }
+        .result-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .status-ok {
+            color: green;
+            font-weight: bold;
+        }
+        .status-error {
+            color: red;
+            font-weight: bold;
+        }
+        .results-header {
+            margin-top: 40px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+        }
     </style>
 </head>
 <body>
 
 <header>
-    <img src="https://cdn-icons-png.flaticon.com/512/727/727245.png" alt="Logo">
+    <img src="https://cdn-icons-png.flaticon.com/512/727/727245.png" alt="Logo"> 
+    <!-- Falls du dein eigenes Logo willst, dann das hier verwenden:
+         <img src="https://deine-domain.de/PietHenryRecords-Logo.png" alt="Piet Henry Records Logo"> -->
     <h1>Audio RMS Checker</h1>
 </header>
 
@@ -75,11 +99,21 @@
     </form>
 
     {% if reports %}
-        <h2>Ergebnisse:</h2>
+        <div class="results-header">Ergebnisse:</div>
         {% for report in reports %}
-            <div>{{ report }}</div>
+            <div class="result-card">
+                <strong>Datei:</strong> {{ report['Datei'] }}<br>
+                <strong>RMS:</strong> {{ report['RMS'] }}<br>
+                <strong>Abweichung:</strong> {{ report['Abweichung'] }}<br>
+                <strong>Status:</strong> 
+                {% if report['Status'] == 'passt' %}
+                    <span class="status-ok">RMS passt</span>
+                {% else %}
+                    <span class="status-error">RMS außerhalb der Vorgaben</span>
+                {% endif %}
+            </div>
         {% endfor %}
-        <br>
+        
         <form action="/download" method="get">
             <button type="submit">Ergebnisse als CSV herunterladen</button>
         </form>
