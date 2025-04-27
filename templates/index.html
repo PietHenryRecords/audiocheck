@@ -101,6 +101,15 @@
             color: red;
             font-weight: bold;
         }
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
@@ -128,7 +137,12 @@
 
     {% if reports %}
     <div id="results">
+        <div class="success-message">
+            ✅ Dateien erfolgreich geprüft!
+        </div>
+
         <h2>Ergebnisse:</h2>
+
         {% for report in reports %}
             <div class="result-card">
                 <strong>Datei:</strong> {{ report['Datei'] }}<br>
@@ -163,7 +177,7 @@ window.onload = function() {
         cards.forEach((card, index) => {
             setTimeout(() => {
                 card.classList.add('visible');
-            }, index * 150); // Zeitabstand zwischen den Karten (150ms)
+            }, index * 150);
         });
     }
 }
