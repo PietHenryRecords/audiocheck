@@ -1,122 +1,146 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <title>Audio RMS Checker</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #fff;
-            margin: 0;
-            padding: 0;
-        }
-        header {
-            background: #9c0000;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        main {
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-        .description {
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        form {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        button {
-            background-color: #9c0000;
-            border: none;
-            color: white;
-            padding: 10px 20px;
-            margin-top: 10px;
-            cursor: pointer;
-            font-size: 16px;
-            border-radius: 5px;
-        }
-        button:hover {
-            background-color: #7a0000;
-        }
-        .results-header {
-            font-size: 22px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .result-card {
-            background: #f8f8f8;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            margin-bottom: 15px;
-        }
-        .status-ok {
-            color: green;
-            font-weight: bold;
-        }
-        .status-fail {
-            color: red;
-            font-weight: bold;
-        }
-        #loader {
-            display: none;
-            border: 6px solid #f3f3f3;
-            border-top: 6px solid #9c0000;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Audio RMS Checker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+    }
+    header {
+      background: #9c0000;
+      color: white;
+      padding: 20px;
+      width: 100%;
+      text-align: center;
+    }
+    main {
+      width: 100%;
+      max-width: 600px;
+      margin-top: 20px;
+      padding: 20px;
+    }
+    .upload-box, .results-box {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    button {
+      background-color: #9c0000;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      margin-top: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      border-radius: 5px;
+    }
+    button:hover {
+      background-color: #7a0000;
+    }
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+    }
+    .results-header {
+      font-size: 22px;
+      font-weight: bold;
+      margin: 20px 0 10px 0;
+    }
+    .result-card {
+      background: white;
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    .ok {
+      color: green;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    ul {
+      padding-left: 20px;
+      margin-top: 5px;
+    }
+    li {
+      margin-bottom: 5px;
+    }
+  </style>
 </head>
 <body>
 
 <header>
-    <h1>Audio RMS Checker</h1>
+  <h1>Audio RMS Checker</h1>
 </header>
 
 <main>
-    <div class="description">
-        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen.
-        Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.
-    </div>
 
-    <form id="upload-form" action="/" method="post" enctype="multipart/form-data">
-        <input type="file" name="files" multiple required><br>
-        <button type="submit">Dateien hochladen und prüfen</button>
+  <div class="upload-box">
+    <p>Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen.<br>
+      Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.</p>
+
+    <form action="/" method="post" enctype="multipart/form-data">
+      <input type="file" name="files" multiple required><br>
+      <button type="submit">Dateien hochladen und prüfen</button>
+    </form>
+  </div>
+
+  {% if success %}
+    <div class="success-message">
+      ✅ Datei(en) erfolgreich geprüft!
+    </div>
+  {% endif %}
+
+  {% if reports %}
+  <div class="results-box">
+    <div class="results-header">Ergebnisse:</div>
+
+    {% for report in reports %}
+      <div class="result-card">
+        <strong>Datei:</strong> {{ report['Datei'] }}<br>
+
+        <strong>Prüfung:</strong>
+        {% if report['Fehler'] %}
+          <ul>
+            {% for fehler in report['Fehler'] %}
+              <li class="error">{{ fehler }}</li>
+            {% endfor %}
+          </ul>
+          <strong>Status:</strong> <span class="error">❌ Fehler</span>
+        {% else %}
+          <ul>
+            <li class="ok">Alle Prüfungen bestanden!</li>
+          </ul>
+          <strong>Status:</strong> <span class="ok">✅ OK</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <form action="/download" method="get">
+      <button type="submit">Ergebnisse als CSV herunterladen</button>
     </form>
 
-    <div id="loader"></div>
+  </div>
+  {% endif %}
 
-    <div id="results"></div>
 </main>
-
-<script>
-    const form = document.getElementById('upload-form');
-    const loader = document.getElementById('loader');
-    const results = document.getElementById('results');
-
-    form.addEventListener('submit', function() {
-        loader.style.display = 'block';
-        results.innerHTML = '';
-    });
-
-    window.onload = function() {
-        if (results.innerHTML.trim() !== '') {
-            loader.style.display = 'none';
-        }
-    }
-</script>
 
 </body>
 </html>
