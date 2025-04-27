@@ -6,7 +6,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: #f5f5f5;
+            background: white;
             margin: 0;
             padding: 0;
         }
@@ -16,6 +16,7 @@
             padding: 20px;
             display: flex;
             align-items: center;
+            justify-content: center;
         }
         header img {
             height: 50px;
@@ -31,7 +32,7 @@
             background: white;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+            text-align: center;
         }
         .description {
             margin-bottom: 30px;
@@ -50,16 +51,17 @@
             cursor: pointer;
             font-size: 16px;
             border-radius: 5px;
+            transition: background 0.3s ease;
         }
         button:hover {
             background-color: #7a0000;
         }
-        .loader {
-            border: 8px solid #f3f3f3;
-            border-top: 8px solid #9c0000;
+        .spinner {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #9c0000;
             border-radius: 50%;
-            width: 60px;
-            height: 60px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
             margin: 20px auto;
         }
@@ -67,22 +69,21 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        #spinner {
-            text-align: center;
-            display: none;
+        #results {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
         }
-        .results-header {
-            font-size: 24px;
-            font-weight: bold;
-            margin-top: 30px;
-            margin-bottom: 10px;
-            color: #333;
+        #results.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
         .result-card {
             background: #f9f9f9;
             border: 1px solid #ddd;
             padding: 15px;
-            margin-bottom: 15px;
+            margin-top: 10px;
+            text-align: left;
             border-radius: 5px;
         }
         .status-ok {
@@ -104,20 +105,23 @@
 
 <main>
     <div class="description">
-        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS) erfüllen. Lade deine MP3-Dateien hoch und erhalte sofort das Ergebnis.
+        Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS) erfüllen.  
+        Lade deine MP3-Dateien hoch und erhalte sofort das Ergebnis.
     </div>
 
-    <form action="/" method="post" enctype="multipart/form-data">
+    <form action="/" method="post" enctype="multipart/form-data" onsubmit="showLoading()">
         <input type="file" name="files" multiple required><br>
         <button type="submit">Dateien hochladen und prüfen</button>
     </form>
 
-    <div id="spinner">
-        <div class="loader"></div>
+    <div id="loading" style="display:none;">
+        <div class="spinner"></div>
+        <p>Bitte warten, die Dateien werden geprüft...</p>
     </div>
 
     {% if reports %}
-        <div class="results-header">Ergebnisse:</div>
+    <div id="results" class="visible">
+        <h2>Ergebnisse:</h2>
         {% for report in reports %}
             <div class="result-card">
                 <strong>Datei:</strong> {{ report['Datei'] }}<br>
@@ -131,16 +135,26 @@
                 {% endif %}
             </div>
         {% endfor %}
+        <br>
         <form action="/download" method="get">
             <button type="submit">Ergebnisse als CSV herunterladen</button>
         </form>
+    </div>
     {% endif %}
 </main>
 
 <script>
-    document.querySelector('form').addEventListener('submit', function() {
-        document.getElementById('spinner').style.display = 'block';
-    });
+function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+}
+window.onload = function() {
+    const results = document.getElementById('results');
+    if (results) {
+        setTimeout(() => {
+            results.classList.add('visible');
+        }, 300);
+    }
+}
 </script>
 
 </body>
