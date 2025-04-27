@@ -1,162 +1,126 @@
-from flask import Flask, render_template, request, send_file, redirect, url_for
+from flask import Flask, render_template, request, send_file
 import os
 import subprocess
 import io
 import csv
-import wave
-import contextlib
-import mutagen
-from mutagen.wave import WAVE
-
-def analyze_audio(filepath):
-    # RMS-Messung
-    try:
-        cmd = [
-            'ffmpeg', '-hide_banner', '-nostats', '-i', filepath,
-            '-af', 'volumedetect', '-f', 'null', '-'
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        output = result.stderr
-
-        mean_volume = None
-        for line in output.splitlines():
-            if "mean_volume:" in line:
-                parts = line.split('mean_volume:')
-                if len(parts) > 1:
-                    mean_volume = parts[1].strip().replace(' dB', '')
-                    break
-        return float(mean_volume) if mean_volume else None
-    except Exception as e:
-        print(f"Fehler bei RMS-Analyse: {e}")
-        return None
-
-def check_wav_properties(filepath):
-    try:
-        with wave.open(filepath, 'rb') as wav_file:
-            channels = wav_file.getnchannels()
-            sample_width = wav_file.getsampwidth()
-            framerate = wav_file.getframerate()
-
-            # Bit-Tiefe berechnen
-            bit_depth = sample_width * 8
-
-            return {
-                'channels': channels,
-                'framerate': framerate,
-                'bit_depth': bit_depth
-            }
-    except Exception as e:
-        print(f"Fehler beim WAV-Check: {e}")
-        return None
-
-def check_mp3_properties(filepath):
-    try:
-        audio = mutagen.File(filepath)
-        if audio.info:
-            return {
-                'channels': 2 if audio.info.mode == 'Joint stereo' or audio.info.mode == 'Stereo' else 1,
-                'framerate': int(audio.info.sample_rate),
-                'bit_depth': None  # MP3 hat keine Bit-Tiefe wie WAV
-            }
-    except Exception as e:
-        print(f"Fehler beim MP3-Check: {e}")
-        return None
-
+import re
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-reports_global = []
-ALLOWED_EXTENSIONS = {'mp3', 'wav'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# Globale Variable für die Reports
+reports_global = []
+
+# Muster für Dateinamen: 001_Titel.mp3 oder 001_Titel.wav
+FILENAME_PATTERN = re.compile(r'^\d{3}_.*\.(mp3|wav)$')
+
+def analyze_audio(filepath):
+    cmd = [
+        'ffmpeg', '-hide_banner', '-i', filepath,
+        '-af', 'volumedetect',
+        '-f', 'null', '-'
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    output = result.stderr
+
+    mean_volume = None
+    for line in output.splitlines():
+        if "mean_volume:" in line:
+            parts = line.split("mean_volume:")
+            if len(parts) > 1:
+                mean_volume = float(parts[1].strip().replace(' dB', ''))
+                break
+
+    return mean_volume
+
+def analyze_format(filepath):
+    cmd = [
+        'ffprobe', '-hide_banner', '-v', 'error',
+        '-select_streams', 'a:0',
+        '-show_entries', 'stream=channels,sample_rate,bit_rate',
+        '-of', 'default=noprint_wrappers=1:nokey=0', filepath
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    info = {}
+
+    for line in result.stdout.splitlines():
+        if line.startswith('channels='):
+            info['channels'] = int(line.replace('channels=', '').strip())
+        if line.startswith('sample_rate='):
+            info['sample_rate'] = int(line.replace('sample_rate=', '').strip())
+        if line.startswith('bit_rate='):
+            info['bit_rate'] = int(line.replace('bit_rate=', '').strip())
+
+    return info
+
+def process_file(file):
+    errors = []
+    filename = file.filename
+
+    if not FILENAME_PATTERN.match(filename):
+        errors.append("Dateiname entspricht nicht dem Muster (z.B. 001_Titel.mp3)")
+        return {'Datei': filename, 'Fehler': errors}
+
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
+
+    extension = filename.lower().split('.')[-1]
+    info = analyze_format(filepath)
+    mean_volume = analyze_audio(filepath)
+
+    if extension == 'wav':
+        if info.get('sample_rate') != 44100:
+            errors.append(f"Sample Rate falsch: {info.get('sample_rate')} Hz (erwartet: 44100 Hz)")
+        if info.get('bit_rate'):
+            bit_depth = int(int(info['bit_rate']) / info['sample_rate'] / info['channels'])
+            if bit_depth != 16:
+                errors.append(f"Bit-Tiefe falsch: {bit_depth} Bit (erwartet: 16 Bit)")
+        if info.get('channels') != 2:
+            errors.append(f"Nicht Stereo: {info.get('channels')} Kanal(e) gefunden")
+
+    if extension == 'mp3':
+        if info.get('channels') == 1:
+            errors.append(f"Nicht Stereo: 1 Kanal gefunden (Mono)")
+
+    if mean_volume is not None:
+        if not (-24 <= mean_volume <= -18):
+            errors.append(f"RMS falsch: {mean_volume:.2f} dB (erwartet zwischen -24 dB und -18 dB)")
+
+    os.remove(filepath)
+    return {'Datei': filename, 'Fehler': errors}
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global reports_global
+    success = False
+
     if request.method == 'POST':
         reports_global = []
+        uploaded_files = request.files.getlist("files")
 
-        if 'files' not in request.files:
-            return redirect(request.url)
-
-        files = request.files.getlist('files')
-
-        for file in files:
-            if file and allowed_file(file.filename):
-                filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-                file.save(filepath)
-
-                report = {'Datei': file.filename}
-
-                extension = file.filename.rsplit('.', 1)[1].lower()
-
-                if extension == 'wav':
-                    props = check_wav_properties(filepath)
-                else:
-                    props = check_mp3_properties(filepath)
-
-                if props:
-                    status = []
-
-                    # Sample Rate prüfen
-                    if props['framerate'] != 44100:
-                        status.append(f"Sample Rate falsch: {props['framerate']} Hz (erwartet: 44100 Hz)")
-
-                    # Bit-Tiefe prüfen (nur bei WAV)
-                    if extension == 'wav' and props['bit_depth'] != 16:
-                        status.append(f"Bit-Tiefe falsch: {props['bit_depth']} Bit (erwartet: 16 Bit)")
-
-                    # Stereo prüfen
-                    if props['channels'] != 2:
-                        status.append(f"Nicht Stereo: {props['channels']} Kanal(e) gefunden")
-
-                    rms = analyze_audio(filepath)
-                    if rms is not None:
-                        report['RMS'] = f"{rms:.2f} dB"
-                        if -24.0 <= rms <= -18.0:
-                            report['RMS_OK'] = True
-                        else:
-                            report['RMS_OK'] = False
-                            status.append(f"RMS falsch: {rms:.2f} dB (erwartet zwischen -24 dB und -18 dB)")
-                    else:
-                        report['RMS'] = "Keine RMS-Daten"
-                        report['RMS_OK'] = False
-                        status.append("RMS konnte nicht ermittelt werden")
-
-                    if not status:
-                        report['Status'] = 'passt'
-                    else:
-                        report['Status'] = 'Fehler'
-                        report['Fehler'] = status
-
+        for file in uploaded_files:
+            if file:
+                report = process_file(file)
                 reports_global.append(report)
 
-                os.remove(filepath)
+        success = True
 
-        return redirect(url_for('index'))
+    return render_template('index.html', reports=reports_global, success=success)
 
-    return render_template('index.html', reports=reports_global)
-
-@app.route('/download')
+@app.route('/download', methods=['GET'])
 def download():
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Datei', 'RMS', 'Status'])
+    writer.writerow(['Datei', 'Status', 'Fehler'])
 
     for report in reports_global:
-        fehler_text = "; ".join(report.get('Fehler', [])) if report.get('Fehler') else "OK"
-        writer.writerow([report['Datei'], report.get('RMS', 'N/A'), fehler_text])
+        status = 'OK' if not report['Fehler'] else 'Fehler'
+        fehler_text = '; '.join(report['Fehler']) if report['Fehler'] else ''
+        writer.writerow([report['Datei'], status, fehler_text])
 
     output.seek(0)
-
-    return send_file(
-        io.BytesIO(output.getvalue().encode()),
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name='audio_reports.csv'
-    )
+    return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='ergebnisse.csv')
 
 if __name__ == '__main__':
     app.run(debug=True)
