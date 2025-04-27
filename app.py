@@ -1,24 +1,19 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, redirect, url_for
 import os
-import re
 import subprocess
 import io
 import csv
+import wave
+import contextlib
+import mutagen
+from mutagen.wave import WAVE
 
-app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-reports_global = []
-FILENAME_PATTERN = re.compile(r'^\d{3}_.*\.(mp3|wav)$', re.IGNORECASE)
-
-
-def analyze_rms(filepath):
+def analyze_audio(filepath):
+    # RMS-Messung
     try:
         cmd = [
             'ffmpeg', '-hide_banner', '-nostats', '-i', filepath,
-            '-af', 'volumedetect',
-            '-f', 'null', '-'
+            '-af', 'volumedetect', '-f', 'null', '-'
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         output = result.stderr
@@ -26,131 +21,142 @@ def analyze_rms(filepath):
         mean_volume = None
         for line in output.splitlines():
             if "mean_volume:" in line:
-                parts = line.split('mean_volume:')[-1].strip()
-                mean_volume = float(parts.split(' ')[0].replace('dB', ''))
-
-        return mean_volume
+                parts = line.split('mean_volume:')
+                if len(parts) > 1:
+                    mean_volume = parts[1].strip().replace(' dB', '')
+                    break
+        return float(mean_volume) if mean_volume else None
     except Exception as e:
         print(f"Fehler bei RMS-Analyse: {e}")
         return None
 
-
-def analyze_wav_details(filepath):
+def check_wav_properties(filepath):
     try:
-        cmd = [
-            'ffprobe', '-v', 'error',
-            '-select_streams', 'a:0',
-            '-show_entries', 'stream=sample_rate,channels,bits_per_sample',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            filepath
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        output = result.stdout.strip().split('\n')
+        with wave.open(filepath, 'rb') as wav_file:
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            framerate = wav_file.getframerate()
 
-        if len(output) != 3:
-            return None, None, None
+            # Bit-Tiefe berechnen
+            bit_depth = sample_width * 8
 
-        sample_rate = int(output[0])
-        channels = int(output[1])
-        bit_depth = int(output[2])
-
-        return sample_rate, channels, bit_depth
+            return {
+                'channels': channels,
+                'framerate': framerate,
+                'bit_depth': bit_depth
+            }
     except Exception as e:
-        print(f"Fehler bei WAV-Details-Analyse: {e}")
-        return None, None, None
+        print(f"Fehler beim WAV-Check: {e}")
+        return None
+
+def check_mp3_properties(filepath):
+    try:
+        audio = mutagen.File(filepath)
+        if audio.info:
+            return {
+                'channels': 2 if audio.info.mode == 'Joint stereo' or audio.info.mode == 'Stereo' else 1,
+                'framerate': int(audio.info.sample_rate),
+                'bit_depth': None  # MP3 hat keine Bit-Tiefe wie WAV
+            }
+    except Exception as e:
+        print(f"Fehler beim MP3-Check: {e}")
+        return None
 
 
-def generate_report(filename, extension, analysis):
-    if extension == '.mp3':
-        rms_value = analysis
-        if rms_value is None:
-            return make_error(filename, "Fehler bei RMS-Analyse")
-        elif -24 <= rms_value <= -18:
-            return make_success(filename, f"RMS: {rms_value:.2f} dB passt")
-        else:
-            return make_error(filename, f"RMS: {rms_value:.2f} dB außerhalb der Vorgaben")
+app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+reports_global = []
+ALLOWED_EXTENSIONS = {'mp3', 'wav'}
 
-    elif extension == '.wav':
-        (sample_rate, channels, bit_depth, rms_value) = analysis
-        if sample_rate != 44100:
-            return make_error(filename, f"Sample Rate falsch: {sample_rate} Hz (erwartet: 44100 Hz)")
-        if channels != 2:
-            return make_error(filename, f"Kanalzahl falsch: {channels} (erwartet: Stereo)")
-        if bit_depth != 16:
-            return make_error(filename, f"Bit-Tiefe falsch: {bit_depth} Bit (erwartet: 16 Bit)")
-        if rms_value is None:
-            return make_error(filename, "Fehler bei RMS-Analyse")
-        elif not (-24 <= rms_value <= -18):
-            return make_error(filename, f"RMS: {rms_value:.2f} dB außerhalb der Vorgaben")
-        else:
-            return make_success(filename, f"Alle Prüfungen bestanden (RMS: {rms_value:.2f} dB)")
-
-    else:
-        return make_error(filename, "Unbekanntes Dateiformat")
-
-
-def make_success(filename, details):
-    return {
-        'Datei': filename,
-        'Prüfung': details,
-        'Status': '✅ bestanden'
-    }
-
-
-def make_error(filename, details):
-    return {
-        'Datei': filename,
-        'Prüfung': details,
-        'Status': '❌ Fehler'
-    }
-
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global reports_global
-    reports_global = []
-
     if request.method == 'POST':
+        reports_global = []
+
+        if 'files' not in request.files:
+            return redirect(request.url)
+
         files = request.files.getlist('files')
+
         for file in files:
-            if file:
-                filename = file.filename
-                filepath = os.path.join(UPLOAD_FOLDER, filename)
+            if file and allowed_file(file.filename):
+                filepath = os.path.join(UPLOAD_FOLDER, file.filename)
                 file.save(filepath)
-                
-                name, extension = os.path.splitext(filename.lower())
 
-                if extension == '.mp3':
-                    rms = analyze_rms(filepath)
-                    report = generate_report(filename, extension, rms)
+                report = {'Datei': file.filename}
 
-                elif extension == '.wav':
-                    sample_rate, channels, bit_depth = analyze_wav_details(filepath)
-                    rms = analyze_rms(filepath)
-                    report = generate_report(filename, extension, (sample_rate, channels, bit_depth, rms))
+                extension = file.filename.rsplit('.', 1)[1].lower()
 
+                if extension == 'wav':
+                    props = check_wav_properties(filepath)
                 else:
-                    report = make_error(filename, "Nur MP3- und WAV-Dateien sind erlaubt")
+                    props = check_mp3_properties(filepath)
+
+                if props:
+                    status = []
+
+                    # Sample Rate prüfen
+                    if props['framerate'] != 44100:
+                        status.append(f"Sample Rate falsch: {props['framerate']} Hz (erwartet: 44100 Hz)")
+
+                    # Bit-Tiefe prüfen (nur bei WAV)
+                    if extension == 'wav' and props['bit_depth'] != 16:
+                        status.append(f"Bit-Tiefe falsch: {props['bit_depth']} Bit (erwartet: 16 Bit)")
+
+                    # Stereo prüfen
+                    if props['channels'] != 2:
+                        status.append(f"Nicht Stereo: {props['channels']} Kanal(e) gefunden")
+
+                    rms = analyze_audio(filepath)
+                    if rms is not None:
+                        report['RMS'] = f"{rms:.2f} dB"
+                        if -24.0 <= rms <= -18.0:
+                            report['RMS_OK'] = True
+                        else:
+                            report['RMS_OK'] = False
+                            status.append(f"RMS falsch: {rms:.2f} dB (erwartet zwischen -24 dB und -18 dB)")
+                    else:
+                        report['RMS'] = "Keine RMS-Daten"
+                        report['RMS_OK'] = False
+                        status.append("RMS konnte nicht ermittelt werden")
+
+                    if not status:
+                        report['Status'] = 'passt'
+                    else:
+                        report['Status'] = 'Fehler'
+                        report['Fehler'] = status
 
                 reports_global.append(report)
 
                 os.remove(filepath)
 
+        return redirect(url_for('index'))
+
     return render_template('index.html', reports=reports_global)
 
-
-@app.route('/download', methods=['GET'])
-def download_csv():
-    global reports_global
+@app.route('/download')
+def download():
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=['Datei', 'Prüfung', 'Status'])
-    writer.writeheader()
+    writer = csv.writer(output)
+    writer.writerow(['Datei', 'RMS', 'Status'])
+
     for report in reports_global:
-        writer.writerow(report)
+        fehler_text = "; ".join(report.get('Fehler', [])) if report.get('Fehler') else "OK"
+        writer.writerow([report['Datei'], report.get('RMS', 'N/A'), fehler_text])
+
     output.seek(0)
 
-    return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv', as_attachment=True, download_name='Ergebnisse.csv')
-
+    return send_file(
+        io.BytesIO(output.getvalue().encode()),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='audio_reports.csv'
+    )
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
