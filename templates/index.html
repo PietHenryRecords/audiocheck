@@ -82,8 +82,24 @@
     li {
       margin-bottom: 5px;
     }
+    /* SPINNER */
+    #spinner {
+      display: none;
+      margin: 20px auto;
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #9c0000;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
+
 <body>
 
 <header>
@@ -96,11 +112,13 @@
     <p>Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen.<br>
       Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.</p>
 
-    <form action="/" method="post" enctype="multipart/form-data">
+    <form id="upload-form" action="/" method="post" enctype="multipart/form-data">
       <input type="file" name="files" multiple required><br>
       <button type="submit">Dateien hochladen und prüfen</button>
     </form>
   </div>
+
+  <div id="spinner"></div> <!-- Spinner -->
 
   {% if success %}
     <div class="success-message">
@@ -109,7 +127,7 @@
   {% endif %}
 
   {% if reports %}
-  <div class="results-box">
+  <div class="results-box" id="results-container">
     <div class="results-header">Ergebnisse:</div>
 
     {% for report in reports %}
@@ -141,6 +159,18 @@
   {% endif %}
 
 </main>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const form = document.getElementById('upload-form');
+    const spinner = document.getElementById('spinner');
+    const resultsContainer = document.getElementById('results-container');
+
+    form.addEventListener('submit', function() {
+        spinner.style.display = 'block'; // Spinner anzeigen
+    });
+});
+</script>
 
 </body>
 </html>
