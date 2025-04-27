@@ -85,6 +85,13 @@
             margin-top: 10px;
             text-align: left;
             border-radius: 5px;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+        .result-card.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
         .status-ok {
             color: green;
@@ -120,7 +127,7 @@
     </div>
 
     {% if reports %}
-    <div id="results" class="visible">
+    <div id="results">
         <h2>Ergebnisse:</h2>
         {% for report in reports %}
             <div class="result-card">
@@ -147,12 +154,17 @@
 function showLoading() {
     document.getElementById('loading').style.display = 'block';
 }
+
 window.onload = function() {
     const results = document.getElementById('results');
     if (results) {
-        setTimeout(() => {
-            results.classList.add('visible');
-        }, 300);
+        results.classList.add('visible');
+        const cards = document.querySelectorAll('.result-card');
+        cards.forEach((card, index) => {
+            setTimeout(() => {
+                card.classList.add('visible');
+            }, index * 150); // Zeitabstand zwischen den Karten (150ms)
+        });
     }
 }
 </script>
