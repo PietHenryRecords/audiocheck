@@ -9,69 +9,51 @@
             background: #fff;
             margin: 0;
             padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
         }
         header {
             background: #9c0000;
             color: white;
             padding: 20px;
             text-align: center;
-            width: 100%;
         }
         main {
             max-width: 600px;
             margin: 40px auto;
-            padding: 30px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+            padding: 20px;
         }
         .description {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
             text-align: center;
         }
-        input[type="file"] {
-            margin-bottom: 10px;
+        form {
+            text-align: center;
+            margin-bottom: 30px;
         }
         button {
             background-color: #9c0000;
             border: none;
             color: white;
             padding: 10px 20px;
+            margin-top: 10px;
+            cursor: pointer;
             font-size: 16px;
             border-radius: 5px;
-            cursor: pointer;
         }
         button:hover {
             background-color: #7a0000;
         }
-        .spinner {
-            display: none;
-            margin: 20px auto;
-            width: 50px;
-            height: 50px;
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #9c0000;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
         .results-header {
-            margin-top: 30px;
             font-size: 22px;
             font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
         }
         .result-card {
-            border: 1px solid #ddd;
+            background: #f8f8f8;
             padding: 15px;
-            margin: 10px 0;
+            border: 1px solid #ccc;
             border-radius: 8px;
-            background: #f9f9f9;
+            margin-bottom: 15px;
         }
         .status-ok {
             color: green;
@@ -81,12 +63,21 @@
             color: red;
             font-weight: bold;
         }
-    </style>
-    <script>
-        function showSpinner() {
-            document.getElementById('spinner').style.display = 'block';
+        #loader {
+            display: none;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #9c0000;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
         }
-    </script>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
 
@@ -100,40 +91,32 @@
         Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.
     </div>
 
-    <form action="/" method="post" enctype="multipart/form-data" onsubmit="showSpinner()">
+    <form id="upload-form" action="/" method="post" enctype="multipart/form-data">
         <input type="file" name="files" multiple required><br>
         <button type="submit">Dateien hochladen und prüfen</button>
     </form>
 
-    <div id="spinner" class="spinner"></div>
+    <div id="loader"></div>
 
-    {% if reports %}
-        <div class="results-header">Ergebnisse:</div>
-        {% for report in reports %}
-            <div class="result-card">
-                <strong>Datei:</strong> {{ report['Datei'] }}<br>
-                <strong>Prüfung:</strong>
-                <ul>
-                {% for check in report['Checks'] %}
-                    <li {% if 'falsch' in check %} style="color:red;" {% else %} style="color:green;" {% endif %}>
-                        {{ check }}
-                    </li>
-                {% endfor %}
-                </ul>
-                <strong>Status:</strong>
-                {% if report['Status'] == 'passt' %}
-                    <span class="status-ok">RMS passt</span>
-                {% else %}
-                    <span class="status-fail">Fehler</span>
-                {% endif %}
-            </div>
-        {% endfor %}
-
-        <form action="/download" method="get">
-            <button type="submit">Ergebnisse als CSV herunterladen</button>
-        </form>
-    {% endif %}
+    <div id="results"></div>
 </main>
+
+<script>
+    const form = document.getElementById('upload-form');
+    const loader = document.getElementById('loader');
+    const results = document.getElementById('results');
+
+    form.addEventListener('submit', function() {
+        loader.style.display = 'block';
+        results.innerHTML = '';
+    });
+
+    window.onload = function() {
+        if (results.innerHTML.trim() !== '') {
+            loader.style.display = 'none';
+        }
+    }
+</script>
 
 </body>
 </html>
