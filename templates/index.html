@@ -2,33 +2,73 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Audio RMS Checker</title>
+    <title>Audio-Check Upload</title>
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2em;
+            background-color: #ffffff;
+            color: #000000;
+        }
+        h1 {
+            color: darkred;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            text-align: center;
+        }
+        input[type="file"] {
+            margin: 1em 0;
+        }
+        button {
+            margin: 1em 0;
+            padding: 0.5em 2em;
+            background-color: darkred;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: red;
+        }
+        pre {
+            text-align: left;
+            background: #f4f4f4;
+            padding: 1em;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+    </style>
 </head>
 <body onload="clearResults()">
 
-    <h1>Audio-Check Upload</h1>
+    <div class="container">
+        <h1>Audio-Check Upload</h1>
 
-    <input type="file" id="fileInput" multiple>
-    <button onclick="uploadFiles()">Dateien hochladen und prüfen</button>
+        <input type="file" id="fileInput" multiple>
+        <br>
+        <button onclick="uploadFiles()">Dateien hochladen und prüfen</button>
 
-    <h2>Antwort vom Server:</h2>
-    <pre id="responseText"></pre>
+        <h2>Antwort vom Server:</h2>
+        <pre id="responseText">Noch keine Datei hochgeladen.</pre>
+    </div>
 
     <script>
         function clearResults() {
-            document.getElementById('responseText').textContent = '';
+            document.getElementById('responseText').textContent = 'Noch keine Datei hochgeladen.';
         }
 
         async function uploadFiles() {
             const responseText = document.getElementById('responseText');
-            responseText.textContent = ''; // Ergebnisse immer leeren
+            responseText.textContent = 'Bitte warten...';
 
             const files = document.getElementById('fileInput').files;
             if (files.length === 0) {
-                responseText.textContent = 'Bitte wählen Sie eine oder mehrere Dateien aus.';
+                responseText.textContent = '❌ Bitte wähle eine oder mehrere Dateien aus.';
                 return;
             }
 
@@ -38,14 +78,14 @@
             }
 
             try {
-                const response = await fetch('/upload', {
+                const response = await fetch('/upload', { // <<< HIER ggf. deine echte Upload-Route setzen
                     method: 'POST',
                     body: formData,
                     cache: 'no-store'
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Serverfehler: ${response.statusText}`);
+                    throw new Error(`Serverfehler: ${response.status} ${response.statusText}`);
                 }
 
                 const result = await response.json();
