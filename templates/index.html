@@ -1,171 +1,60 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Audio RMS Checker</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #fff;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-    }
-    header {
-      background: #9c0000;
-      color: white;
-      width: 100%;
-      padding: 20px;
-      text-align: center;
-    }
-    main {
-      width: 100%;
-      max-width: 600px;
-      margin-top: 20px;
-      padding: 20px;
-    }
-    .upload-box, .results-box {
-      background: #f9f9f9;
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    button {
-      background-color: #9c0000;
-      border: none;
-      color: white;
-      padding: 10px 20px;
-      margin-top: 10px;
-      cursor: pointer;
-      font-size: 16px;
-      border-radius: 5px;
-    }
-    button:hover {
-      background-color: #7a0000;
-    }
-    .success-message {
-      background: #d4edda;
-      color: #155724;
-      padding: 10px;
-      border-radius: 5px;
-      margin-top: 10px;
-    }
-    .results-header {
-      font-size: 22px;
-      font-weight: bold;
-      margin: 20px 0 10px 0;
-    }
-    .result-card {
-      background: white;
-      border: 1px solid #ccc;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-    }
-    .ok {
-      color: green;
-      font-weight: bold;
-    }
-    .error {
-      color: red;
-      font-weight: bold;
-    }
-    ul {
-      padding-left: 20px;
-      margin-top: 5px;
-    }
-    li {
-      margin-bottom: 5px;
-    }
-    /* Spinner */
-    .spinner {
-      display: none;
-      margin: 20px auto;
-      width: 40px;
-      height: 40px;
-      border: 5px solid #ccc;
-      border-top: 5px solid #9c0000;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg);}
-      100% { transform: rotate(360deg);}
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Audio RMS Checker</title>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
 </head>
-<body>
+<body onload="clearResults()">
 
-<header>
-  <h1>Audio RMS Checker</h1>
-</header>
+    <h1>Audio-Check Upload</h1>
 
-<main>
+    <input type="file" id="fileInput" multiple>
+    <button onclick="uploadFiles()">Dateien hochladen und prüfen</button>
 
-  <div class="upload-box">
-    <p>Prüfe hier schnell und einfach, ob deine Hörbuch-Dateien die korrekte Lautheit (RMS), Sample Rate, Bit-Tiefe und Stereo erfüllen.<br>
-      Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort das Ergebnis.</p>
+    <h2>Antwort vom Server:</h2>
+    <pre id="responseText"></pre>
 
-    <form id="uploadForm" action="/" method="post" enctype="multipart/form-data">
-      <input type="file" name="files" multiple required><br>
-      <button type="submit">Dateien hochladen und prüfen</button>
-    </form>
+    <script>
+        function clearResults() {
+            document.getElementById('responseText').textContent = '';
+        }
 
-    <div class="spinner" id="spinner"></div>
-  </div>
+        async function uploadFiles() {
+            const responseText = document.getElementById('responseText');
+            responseText.textContent = ''; // Ergebnisse immer leeren
 
-  {% if success %}
-    <div class="success-message">
-      ✅ Datei(en) erfolgreich geprüft!
-    </div>
-  {% endif %}
+            const files = document.getElementById('fileInput').files;
+            if (files.length === 0) {
+                responseText.textContent = 'Bitte wählen Sie eine oder mehrere Dateien aus.';
+                return;
+            }
 
-  {% if reports %}
-  <div class="results-box" id="resultsBox">
-    <div class="results-header">Ergebnisse:</div>
+            const formData = new FormData();
+            for (const file of files) {
+                formData.append('files', file);
+            }
 
-    {% for report in reports %}
-      <div class="result-card">
-        <strong>Datei:</strong> {{ report['Datei'] }}<br>
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    cache: 'no-store'
+                });
 
-        <strong>Prüfung:</strong>
-        {% if report['Fehler'] %}
-          <ul>
-            {% for fehler in report['Fehler'] %}
-              <li class="error">{{ fehler }}</li>
-            {% endfor %}
-          </ul>
-          <strong>Status:</strong> <span class="error">❌ Fehler</span>
-        {% else %}
-          <ul>
-            <li class="ok">Alle Prüfungen bestanden!</li>
-          </ul>
-          <strong>Status:</strong> <span class="ok">✅ OK</span>
-        {% endif %}
-      </div>
-    {% endfor %}
+                if (!response.ok) {
+                    throw new Error(`Serverfehler: ${response.statusText}`);
+                }
 
-    <form action="/download" method="get">
-      <button type="submit">Ergebnisse als CSV herunterladen</button>
-    </form>
-
-  </div>
-  {% endif %}
-
-</main>
-
-<script>
-  const form = document.getElementById('uploadForm');
-  const spinner = document.getElementById('spinner');
-
-  form.addEventListener('submit', function() {
-    spinner.style.display = 'block';
-  });
-</script>
+                const result = await response.json();
+                responseText.textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                responseText.textContent = `Fehler beim Hochladen: ${error.message}`;
+            }
+        }
+    </script>
 
 </body>
 </html>
