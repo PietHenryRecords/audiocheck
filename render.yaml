@@ -1,1 +1,8 @@
+services:
+  - type: web
+    name: audiochecker
+    env: python
+    buildCommand: ""
+    startCommand: python app.py
+    plan: free
 
