@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Audio Qualitätsprüfung</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎧 Audio Qualitätscheck</h1>
+        <p>Lade deine MP3- oder WAV-Dateien hoch und erhalte sofort einen Fehlerbericht zur Lautstärke.</p>
+
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="files" accept=".mp3,.wav" multiple required>
+            <button type="submit">Dateien prüfen</button>
+        </form>
+
+        {% if report %}
+            <h2>Ergebnis</h2>
+            <pre style="text-align:left; background:#eee; padding:15px; white-space:pre-wrap;">{{ report }}</pre>
+            <a href="/download_pdf"><button>Bericht als PDF herunterladen</button></a>
+        {% endif %}
+    </div>
+</body>
+</html>
+
