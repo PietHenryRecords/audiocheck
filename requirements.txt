@@ -3,4 +3,4 @@ numpy
 scipy
 reportlab
 gunicorn
-scipy.io.wavfile.read
+scipy
