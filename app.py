@@ -1,20 +1,27 @@
 from flask import Flask, request, render_template, send_file, session
 import os
-from pydub import AudioSegment
 import numpy as np
+import subprocess
+from scipy.io import wavfile
 from reportlab.pdfgen import canvas
 import io
 
 app = Flask(__name__)
-app.secret_key = "sicherer-schlüssel"  # nötig für Session
+app.secret_key = "sicherer-schlüssel"
 
 UPLOAD_FOLDER = 'uploads'
 REPORT_FOLDER = 'reports'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(REPORT_FOLDER, exist_ok=True)
 
-def calculate_rms(audio):
-    rms = audio.rms / (2**15)
+def convert_mp3_to_wav(mp3_path, wav_path):
+    subprocess.run(["ffmpeg", "-y", "-i", mp3_path, wav_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def calculate_rms(wav_path):
+    samplerate, data = wavfile.read(wav_path)
+    if data.ndim > 1:
+        data = data.mean(axis=1)
+    rms = np.sqrt(np.mean(np.square(data / 32768.0)))
     rms_db = 20 * np.log10(rms)
     return round(rms_db, 2)
 
@@ -30,24 +37,23 @@ def index():
             file.save(filepath)
 
             if file.filename.endswith(".mp3"):
-                audio = AudioSegment.from_mp3(filepath)
+                wav_path = filepath.replace(".mp3", ".wav")
+                convert_mp3_to_wav(filepath, wav_path)
             else:
-                audio = AudioSegment.from_wav(filepath)
+                wav_path = filepath
 
-            rms_db = calculate_rms(audio)
+            try:
+                rms_db = calculate_rms(wav_path)
+            except Exception as e:
+                report_lines.append(f"❌ Fehler bei {file.filename}: {str(e)}")
+                continue
 
-            issues = []
             if rms_db < -24 or rms_db > -18:
-                issues.append(f"RMS-Wert außerhalb des zulässigen Bereichs: {rms_db} dB")
-
-            if issues:
                 report_lines.append(f"⚠️ Datei: {file.filename}")
-                report_lines.extend([f" – {issue}" for issue in issues])
-                report_lines.append("")
+                report_lines.append(f" – RMS-Wert außerhalb des Bereichs: {rms_db} dB\n")
 
         report = "\n".join(report_lines)
-        session["bericht_text"] = report  # für PDF-Export
-
+        session["bericht_text"] = report
         return render_template("index.html", report=report)
 
     return render_template("index.html", report=None)
@@ -58,7 +64,6 @@ def download_pdf():
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer)
     p.setFont("Helvetica", 12)
-
     y = 800
     for line in report.split("\n"):
         p.drawString(50, y, line)
@@ -66,7 +71,6 @@ def download_pdf():
         if y < 50:
             p.showPage()
             y = 800
-
     p.save()
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name="bericht.pdf", mimetype="application/pdf")
