@@ -1,8 +1,10 @@
 services:
   - type: web
-    name: audiochecker
+    name: audiocheck
     env: python
-    buildCommand: ""
-    startCommand: python app.py
     plan: free
+    buildCommand: ""
+    startCommand: gunicorn app:app
+    autoDeploy: true
+
 
