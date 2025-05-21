@@ -1,79 +1,129 @@
-from flask import Flask, request, render_template, send_file, session
-import os
+import wave
+import struct
 import numpy as np
-import subprocess
-from scipy.io import wavfile
+import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-import io
+from io import BytesIO
+import subprocess
+import tempfile
+import os
 
-app = Flask(__name__)
-app.secret_key = "sicherer-schlüssel"
+class AudioChecker:
+    """
+    Analyze audio files (.wav and .mp3) and generate PDF reports.
+    Requires ffmpeg installed and accessible in PATH for MP3 support.
+    """
+    def __init__(self, filepath: str):
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext not in ('.wav', '.mp3'):
+            raise ValueError("Only .wav and .mp3 files are supported.")
+        self.filepath = filepath
+        self.params = None
+        self.frames = None
+        self.signal = None
 
-UPLOAD_FOLDER = 'uploads'
-REPORT_FOLDER = 'reports'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(REPORT_FOLDER, exist_ok=True)
+    def load_wav(self):
+        """
+        Load audio, converting MP3 to WAV via ffmpeg if necessary.
+        """
+        # Determine working WAV path
+        filepath = self.filepath
+        temp_wav = None
+        if filepath.lower().endswith('.mp3'):
+            # Convert MP3 to WAV using ffmpeg
+            tmp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+            temp_wav = tmp.name
+            tmp.close()
+            subprocess.run([
+                'ffmpeg', '-y', '-i', filepath,
+                '-ar', '44100', '-ac', '2', temp_wav
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            filepath = temp_wav
 
-def convert_mp3_to_wav(mp3_path, wav_path):
-    subprocess.run(["ffmpeg", "-y", "-i", mp3_path, wav_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Read WAV
+        with wave.open(filepath, 'rb') as wf:
+            self.params = wf.getparams()
+            raw = wf.readframes(self.params.nframes)
 
-def calculate_rms(wav_path):
-    samplerate, data = wavfile.read(wav_path)
-    if data.ndim > 1:
-        data = data.mean(axis=1)
-    rms = np.sqrt(np.mean(np.square(data / 32768.0)))
-    rms_db = 20 * np.log10(rms)
-    return round(rms_db, 2)
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    report = ""
-    if request.method == "POST":
-        files = request.files.getlist("files")
-        report_lines = []
-
-        for file in files:
-            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(filepath)
-
-            if file.filename.endswith(".mp3"):
-                wav_path = filepath.replace(".mp3", ".wav")
-                convert_mp3_to_wav(filepath, wav_path)
-            else:
-                wav_path = filepath
-
+        # Clean up temporary file
+        if temp_wav:
             try:
-                rms_db = calculate_rms(wav_path)
-            except Exception as e:
-                report_lines.append(f"❌ Fehler bei {file.filename}: {str(e)}")
-                continue
+                os.remove(temp_wav)
+            except OSError:
+                pass
 
-            if rms_db < -24 or rms_db > -18:
-                report_lines.append(f"⚠️ Datei: {file.filename}")
-                report_lines.append(f" – RMS-Wert außerhalb des Bereichs: {rms_db} dB\n")
+        # Unpack to numpy signal
+        fmt = '<' + 'h' * (self.params.nframes * self.params.nchannels)
+        data = struct.unpack(fmt, raw)
+        signal = np.array(data)
+        if self.params.nchannels > 1:
+            signal = signal.reshape(-1, self.params.nchannels)
+        self.frames = self.params.nframes
+        self.signal = signal
 
-        report = "\n".join(report_lines)
-        session["bericht_text"] = report
-        return render_template("index.html", report=report)
+    def analyze(self):
+        if self.signal is None:
+            raise RuntimeError("Audio not loaded. Call load_wav() first.")
+        duration = self.frames / self.params.framerate
+        peak = np.max(np.abs(self.signal))
+        mean_amp = np.mean(np.abs(self.signal))
+        return {
+            'channels': self.params.nchannels,
+            'sample_width': self.params.sampwidth,
+            'framerate': self.params.framerate,
+            'frames': self.frames,
+            'duration_s': duration,
+            'peak_amplitude': int(peak),
+            'mean_amplitude': float(mean_amp)
+        }
 
-    return render_template("index.html", report=None)
+    def plot_waveform(self):
+        if self.signal is None:
+            raise RuntimeError("Audio not loaded. Call load_wav() first.")
+        plt.figure()
+        if self.params.nchannels > 1:
+            plt.plot(self.signal[:, 0], label='Left')
+            plt.plot(self.signal[:, 1], label='Right')
+            plt.legend()
+        else:
+            plt.plot(self.signal)
+        plt.title('Waveform')
+        plt.xlabel('Samples')
+        plt.ylabel('Amplitude')
+        buf = BytesIO()
+        plt.savefig(buf, format='PNG')
+        plt.close()
+        buf.seek(0)
+        return buf
 
-@app.route("/download_pdf")
-def download_pdf():
-    report = session.get("bericht_text", "Kein Bericht vorhanden.")
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer)
-    p.setFont("Helvetica", 12)
-    y = 800
-    for line in report.split("\n"):
-        p.drawString(50, y, line)
-        y -= 20
-        if y < 50:
-            p.showPage()
-            y = 800
-    p.save()
-    buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name="bericht.pdf", mimetype="application/pdf")
+    def export_pdf_report(self, output_pdf: str):
+        analysis = self.analyze()
+        waveform_img = self.plot_waveform()
 
-if __name__ == "__main__":
-    app.run(debug=True)
+        c = canvas.Canvas(output_pdf, pagesize=A4)
+        width, height = A4
+        c.setFont('Helvetica-Bold', 14)
+        c.drawString(30, height - 50, 'AudioChecker Report')
+        c.setFont('Helvetica', 12)
+        y = height - 80
+        for key, value in analysis.items():
+            c.drawString(30, y, f"{key.replace('_', ' ').title()}: {value}")
+            y -= 20
+        c.drawImage(waveform_img, 30, y - 300, width=500, preserveAspectRatio=True)
+        c.showPage()
+        c.save()
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='AudioChecker: Analyze .wav and .mp3 files and generate PDF reports'
+    )
+    parser.add_argument('input', help='Path to input audio file (.wav or .mp3)')
+    parser.add_argument('-o', '--output', default='report.pdf', help='Path to output PDF report')
+    args = parser.parse_args()
+
+    checker = AudioChecker(args.input)
+    checker.load_wav()
+    checker.export_pdf_report(args.output)
+    print(f"PDF report saved to {args.output}")
